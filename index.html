@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/@hpcc-js/wasm@1.20.0/dist/index.min.js"></script>
     <script src="https://unpkg.com/d3-graphviz@4.0.0/build/d3-graphviz.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/loader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -263,6 +264,7 @@
             <button id="zoom-in">+</button>
             <button id="zoom-out">-</button>
             <button id="reset">Reset</button>
+            <button id="share-graph">Share Graph</button>
         </div>
         <div class="tooltip" id="tooltip"></div>
     </div>
@@ -278,10 +280,23 @@
         function loadGraphFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
             const encodedDot = urlParams.get('graph');
+            const compressedDot = urlParams.get('c');
             
-            if (encodedDot) {
+            if (compressedDot) {
                 try {
-                    // Decode the DOT data from URL
+                    // Decompress the DOT data from URL
+                    dotSource = LZString.decompressFromEncodedURIComponent(compressedDot);
+                    if (!dotSource) {
+                        console.error("Decompression resulted in null/empty data");
+                        dotSource = defaultDotSource;
+                    }
+                } catch (e) {
+                    console.error("Error decompressing graph from URL:", e);
+                    dotSource = defaultDotSource;
+                }
+            } else if (encodedDot) {
+                try {
+                    // Decode the DOT data from URL (legacy support)
                     dotSource = decodeURIComponent(encodedDot);
                 } catch (e) {
                     console.error("Error decoding graph from URL:", e);
@@ -294,10 +309,13 @@
         
         // Function to update URL with encoded graph
         function updateUrlWithGraph(graphData) {
-            const encodedGraph = encodeURIComponent(graphData);
+            // Use LZ-based compression to reduce URL size
+            const compressedGraph = LZString.compressToEncodedURIComponent(graphData);
+            
+            // Create URL with compressed data
             const newUrl = window.location.origin + 
-                           window.location.pathname + 
-                           '?graph=' + encodedGraph;
+                          window.location.pathname + 
+                          '?c=' + compressedGraph;
             
             // Update URL without reloading the page
             window.history.pushState({ graph: graphData }, '', newUrl);
@@ -824,6 +842,11 @@
 
         // Add a "Share" button to the controls
         function addShareButton() {
+            // Check if button already exists
+            if (document.getElementById('share-graph')) {
+                return; // Button already exists, no need to create it
+            }
+            
             const controlsDiv = document.querySelector('.controls');
             const shareButton = document.createElement('button');
             shareButton.textContent = 'Share Graph';
@@ -834,10 +857,10 @@
             // Add event listener for the share button
             shareButton.addEventListener('click', function() {
                 // Create shareable URL with current graph
-                const encodedGraph = encodeURIComponent(dotSource);
+                const compressedGraph = LZString.compressToEncodedURIComponent(dotSource);
                 const shareableUrl = window.location.origin + 
                                     window.location.pathname + 
-                                    '?graph=' + encodedGraph;
+                                    '?c=' + compressedGraph;
                 
                 // Copy to clipboard
                 navigator.clipboard.writeText(shareableUrl)
@@ -856,8 +879,8 @@
             });
         }
         
-        // Call to add the share button after the page loads
-        document.addEventListener('DOMContentLoaded', addShareButton);
+        // Don't need to call addShareButton since we already have the button in HTML
+        // document.addEventListener('DOMContentLoaded', addShareButton);
     </script>
 </body>
 </html>
