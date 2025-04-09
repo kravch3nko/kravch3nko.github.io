@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graphviz Editor</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/@hpcc-js/wasm@1.20.0/dist/index.min.js"></script>
+    <script src="https://unpkg.com/d3-graphviz@4.0.0/build/d3-graphviz.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/loader.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            overflow: hidden;
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        #graph {
+            flex: 1;
+            background-color: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: width 0.3s;
+        }
+        .editor-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 40%;
+            height: 100%;
+            background-color: #1e1e1e;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            z-index: 900;
+            display: none;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            transform: translateX(-100%);
+        }
+        .editor-container.active {
+            transform: translateX(0);
+            display: flex;
+        }
+        #editor {
+            flex-grow: 1;
+            width: 100%;
+        }
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #333;
+            color: white;
+        }
+        .editor-header h3 {
+            margin: 0;
+        }
+        .editor-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .editor-toggle {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .editor-toggle:hover {
+            background-color: #3367D6;
+        }
+        .graph-container {
+            flex: 1;
+            display: flex;
+            transition: margin-left 0.3s;
+        }
+        .graph-container.editor-active {
+            margin-left: 40%;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            width: 200px;
+        }
+        .controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        .controls button {
+            padding: 8px 12px;
+            border: none;
+            background-color: #4285F4;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .controls button:hover {
+            background-color: #3367D6;
+        }
+        .controls select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+        .controls .view-mode {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .controls .view-mode label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        .controls .view-mode input {
+            margin: 0;
+        }
+        .hop-limit {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .hop-limit .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .hop-limit input[type="range"] {
+            flex: 1;
+        }
+        .hop-limit .hop-value {
+            font-weight: bold;
+            min-width: 25px;
+            text-align: center;
+        }
+        .hop-limit .unlimited {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 300px;
+            z-index: 1000;
+            white-space: pre-line;
+        }
+        .node:hover {
+            cursor: pointer;
+            filter: brightness(1.2);
+        }
+        .node text {
+            font-weight: bold;
+        }
+        .cluster {
+            opacity: 0.7;
+        }
+        .highlighted {
+            stroke: #FFD700;
+            stroke-width: 3px;
+        }
+        .faded {
+            opacity: 0.2;
+        }
+        .selected-arrow {
+            stroke: #FF4500;
+            stroke-width: 4px;
+        }
+        /* Exclude text from highlighting */
+        .node.highlighted text {
+            stroke: none;
+            fill: #000000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button id="editor-toggle" class="editor-toggle">Show Editor</button>
+        <div id="editor-container" class="editor-container">
+            <div class="editor-header">
+                <h3>DOT Editor</h3>
+                <div class="editor-buttons">
+                    <button id="apply-changes">Apply Changes</button>
+                    <button id="close-editor">Close</button>
+                </div>
+            </div>
+            <div id="editor"></div>
+        </div>
+        <div id="graph-container" class="graph-container">
+            <div id="graph"></div>
+        </div>
+        <div class="controls">
+            <h3>Controls</h3>
+            <div class="view-mode">
+                <label>
+                    <input type="radio" name="view-mode" value="all" checked> Show All
+                </label>
+                <label>
+                    <input type="radio" name="view-mode" value="single"> Single
+                </label>
+                <label>
+                    <input type="radio" name="view-mode" value="bidirectional"> Bidirectional
+                </label>
+                <label>
+                    <input type="radio" name="view-mode" value="downstream"> Downstream
+                </label>
+                <label>
+                    <input type="radio" name="view-mode" value="upstream"> Upstream
+                </label>
+            </div>
+            <select id="node-select">
+                <option value="">Select a node...</option>
+            </select>
+            <div class="hop-limit">
+                <label>Max Hops: <span id="hop-value" class="hop-value">5</span></label>
+                <div class="slider-container">
+                    <input type="range" id="hop-limit" min="1" max="10" value="5">
+                </div>
+                <div class="unlimited">
+                    <input type="checkbox" id="unlimited-hops">
+                    <label for="unlimited-hops">Unlimited Hops</label>
+                </div>
+            </div>
+            <button id="zoom-in">+</button>
+            <button id="zoom-out">-</button>
+            <button id="reset">Reset</button>
+        </div>
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script>
+        // Initialize the graphviz renderer
+        let dotSource;
+
+        // Default DOT source if none is provided in URL
+        let defaultDotSource;
+
+        // Check if there's a graph in the URL
+        function loadGraphFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const encodedDot = urlParams.get('graph');
+            
+            if (encodedDot) {
+                try {
+                    // Decode the DOT data from URL
+                    dotSource = decodeURIComponent(encodedDot);
+                } catch (e) {
+                    console.error("Error decoding graph from URL:", e);
+                    dotSource = defaultDotSource;
+                }
+            } else {
+                dotSource = defaultDotSource;
+            }
+        }
+        
+        // Function to update URL with encoded graph
+        function updateUrlWithGraph(graphData) {
+            const encodedGraph = encodeURIComponent(graphData);
+            const newUrl = window.location.origin + 
+                           window.location.pathname + 
+                           '?graph=' + encodedGraph;
+            
+            // Update URL without reloading the page
+            window.history.pushState({ graph: graphData }, '', newUrl);
+        }
+        
+        // Load the graph data from URL or use default
+        loadGraphFromUrl();
+
+        // Initialize Editor
+        let editor;
+        
+        // Setup Monaco Editor
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            // Register DOT language
+            monaco.languages.register({ id: 'dot' });
+            
+            // Define DOT syntax highlighting
+            monaco.languages.setMonarchTokensProvider('dot', {
+                defaultToken: '',
+                tokenPostfix: '.dot',
+                
+                keywords: [
+                    'strict', 'graph', 'digraph', 'node', 'edge', 'subgraph', 'rank'
+                ],
+                
+                attributes: [
+                    'style', 'color', 'fillcolor', 'fontcolor', 'fontname', 'fontsize', 
+                    'label', 'shape', 'penwidth', 'splines', 'overlap', 'margin'
+                ],
+                
+                tokenizer: {
+                    root: [
+                        // Identifiers and keywords
+                        [/[a-zA-Z_]\w*/, {
+                            cases: {
+                                '@keywords': 'keyword',
+                                '@attributes': 'attribute',
+                                '@default': 'identifier'
+                            }
+                        }],
+                        
+                        // Comments
+                        [/\/\/.*$/, 'comment'],
+                        [/\/\*/, 'comment', '@comment'],
+                        
+                        // Strings
+                        [/"/, 'string', '@string'],
+                        
+                        // Numbers
+                        [/\d+(\.\d+)?/, 'number'],
+                        
+                        // Operators and special characters
+                        [/[=;,{}[\]()]/, 'delimiter'],
+                        [/->|--/, 'operator'],
+                    ],
+                    
+                    comment: [
+                        [/[^/*]+/, 'comment'],
+                        [/\*\//, 'comment', '@pop'],
+                        [/[/*]/, 'comment']
+                    ],
+                    
+                    string: [
+                        [/[^\\"]+/, 'string'],
+                        [/\\./, 'string.escape'],
+                        [/"/, 'string', '@pop']
+                    ]
+                }
+            });
+            
+            // Create the editor
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: dotSource,
+                language: 'dot',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                wordWrap: 'on',
+                minimap: {
+                    enabled: true
+                }
+            });
+            
+            // Apply changes button
+            document.getElementById('apply-changes').addEventListener('click', function() {
+                const newDotSource = editor.getValue();
+                try {
+                    // Update the dot source and rerender
+                    updateDotSource(newDotSource);
+                } catch (error) {
+                    alert('Error parsing DOT: ' + error.message);
+                }
+            });
+        });
+        
+        // Function to update the DOT source
+        function updateDotSource(newDotSource) {
+            // Update the global dotSource
+            dotSource = newDotSource;
+            
+            // Update URL with the new graph
+            updateUrlWithGraph(newDotSource);
+            
+            // Re-parse the DOT source and update global variables
+            const parsed = parseDotSource(newDotSource);
+            nodes = parsed.nodes;
+            edges = parsed.edges;
+            
+            // Repopulate the service select dropdown
+            const serviceSelect = document.getElementById("node-select");
+            serviceSelect.innerHTML = '<option value="">Select a service...</option>';
+            
+            nodes.forEach(node => {
+                const option = document.createElement("option");
+                option.value = node.id;
+                option.textContent = node.id;
+                serviceSelect.appendChild(option);
+            });
+            
+            // Re-render the graph
+            graphviz
+                .renderDot(newDotSource)
+                .on("end", function() {
+                    // Set up node interactions
+                    d3.selectAll(".node")
+                        .on("mouseover", function(event) {
+                            const nodeLabel = d3.select(this).select("text").text();
+                            tooltip
+                                .style("opacity", 1)
+                                .html(nodeLabel)
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 20) + "px");
+                        })
+                        .on("mouseout", function() {
+                            tooltip.style("opacity", 0);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 20) + "px");
+                        })
+                        .on("click", function() {
+                            const nodeId = d3.select(this).select("text").text();
+                            serviceSelect.value = nodeId;
+                            updateView();
+                        });
+                });
+        }
+
+        // Toggle editor
+        document.getElementById('editor-toggle').addEventListener('click', function() {
+            const editorContainer = document.getElementById('editor-container');
+            const graphContainer = document.getElementById('graph-container');
+            editorContainer.classList.toggle('active');
+            graphContainer.classList.toggle('editor-active');
+            
+            // Update button text
+            this.textContent = editorContainer.classList.contains('active') ? 'Hide Editor' : 'Show Editor';
+        });
+        
+        // Close editor
+        document.getElementById('close-editor').addEventListener('click', function() {
+            const editorContainer = document.getElementById('editor-container');
+            const graphContainer = document.getElementById('graph-container');
+            const toggleButton = document.getElementById('editor-toggle');
+            
+            editorContainer.classList.remove('active');
+            graphContainer.classList.remove('editor-active');
+            toggleButton.textContent = 'Show Editor';
+        });
+
+        // Parse the DOT source to extract nodes and edges
+        function parseDotSource(dotSource) {
+            const nodes = [];
+            const edges = [];
+            
+            // Extract nodes
+            const nodeRegex = /"([^"]+)"\s*\[([^\]]+)\]/g;
+            let match;
+            while ((match = nodeRegex.exec(dotSource)) !== null) {
+                const nodeId = match[1];
+                const nodeAttrs = match[2];
+                nodes.push({
+                    id: nodeId,
+                    attrs: nodeAttrs
+                });
+            }
+            
+            // Extract edges
+            const edgeRegex = /"([^"]+)"\s*->\s*"([^"]+)"/g;
+            while ((match = edgeRegex.exec(dotSource)) !== null) {
+                const source = match[1];
+                const target = match[2];
+                edges.push({
+                    source: source,
+                    target: target
+                });
+            }
+            
+            return { nodes, edges };
+        }
+
+        // Set up the SVG and graphviz
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        // Create the graphviz instance
+        const graphviz = d3.select("#graph")
+            .graphviz()
+            .width(width)
+            .height(height)
+            .zoom(true)
+            .fit(true);
+
+        // Parse the DOT source
+        let { nodes, edges } = parseDotSource(dotSource);
+        
+        // Populate the service select dropdown
+        const serviceSelect = document.getElementById("node-select");
+        nodes.forEach(node => {
+            const option = document.createElement("option");
+            option.value = node.id;
+            option.textContent = node.id;
+            serviceSelect.appendChild(option);
+        });
+
+        // Load and render the DOT data
+        function renderGraph() {
+            // Create tooltip
+            const tooltip = d3.select("#tooltip");
+            
+            // Render the graph
+            graphviz
+                .renderDot(dotSource)
+                .on("end", function() {
+                    // Set up node interactions
+                    d3.selectAll(".node")
+                        .on("mouseover", function(event) {
+                            const nodeLabel = d3.select(this).select("text").text();
+                            tooltip
+                                .style("opacity", 1)
+                                .html(nodeLabel)
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 20) + "px");
+                        })
+                        .on("mouseout", function() {
+                            tooltip.style("opacity", 0);
+                        })
+                        .on("mousemove", function(event) {
+                            tooltip
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 20) + "px");
+                        })
+                        .on("click", function() {
+                            const nodeId = d3.select(this).select("text").text();
+                            serviceSelect.value = nodeId;
+                            updateView();
+                        });
+                });
+        }
+
+        // Function to update the view based on selected service and view mode
+        function updateView() {
+            const selectedService = serviceSelect.value;
+            const viewMode = document.querySelector('input[name="view-mode"]:checked').value;
+            const unlimitedHops = document.getElementById("unlimited-hops").checked;
+            const maxHops = unlimitedHops ? Number.MAX_SAFE_INTEGER : parseInt(document.getElementById("hop-limit").value);
+            
+            if (!selectedService || viewMode === 'all') {
+                // Reset to show all nodes and edges
+                d3.selectAll(".node").classed("highlighted", false).classed("faded", false);
+                d3.selectAll(".edge").classed("highlighted", false).classed("faded", false).classed("selected-arrow", false);
+                return;
+            }
+            
+            // Find all edges connected to the selected service
+            const connectedEdges = edges.filter(edge => 
+                edge.source === selectedService || edge.target === selectedService
+            );
+            
+            // Find all nodes connected to the selected service
+            const connectedNodeIds = new Set();
+            connectedNodeIds.add(selectedService);
+            
+            connectedEdges.forEach(edge => {
+                connectedNodeIds.add(edge.source);
+                connectedNodeIds.add(edge.target);
+            });
+            
+            // Find downstream nodes (nodes that depend on the selected service) with hop limit
+            const downstreamNodeIds = new Set();
+            const downstreamHops = new Map(); // Track hops for each node
+            if (viewMode === 'downstream' || viewMode === 'bidirectional') {
+                downstreamHops.set(selectedService, 0); // Starting node has 0 hops
+                findDownstreamNodes(selectedService, downstreamNodeIds, downstreamHops, maxHops);
+            }
+            
+            // Find upstream nodes (nodes that the selected service depends on) with hop limit
+            const upstreamNodeIds = new Set();
+            const upstreamHops = new Map(); // Track hops for each node
+            if (viewMode === 'upstream' || viewMode === 'bidirectional') {
+                upstreamHops.set(selectedService, 0); // Starting node has 0 hops
+                findUpstreamNodes(selectedService, upstreamNodeIds, upstreamHops, maxHops);
+            }
+            
+            // Apply highlighting based on view mode
+            d3.selectAll(".node").each(function() {
+                const nodeId = d3.select(this).select("text").text();
+                let shouldHighlight = false;
+                
+                if (viewMode === 'single') {
+                    shouldHighlight = nodeId === selectedService || connectedNodeIds.has(nodeId);
+                } else if (viewMode === 'downstream') {
+                    shouldHighlight = nodeId === selectedService || downstreamNodeIds.has(nodeId);
+                } else if (viewMode === 'upstream') {
+                    shouldHighlight = nodeId === selectedService || upstreamNodeIds.has(nodeId);
+                } else if (viewMode === 'bidirectional') {
+                    shouldHighlight = nodeId === selectedService || 
+                                     downstreamNodeIds.has(nodeId) || 
+                                     upstreamNodeIds.has(nodeId);
+                }
+                
+                d3.select(this)
+                    .classed("highlighted", shouldHighlight)
+                    .classed("faded", !shouldHighlight);
+            });
+            
+            // Apply highlighting to edges
+            d3.selectAll(".edge").each(function() {
+                const edge = d3.select(this);
+                // Get the title element inside the edge which contains source and target
+                const titleEl = edge.select("title");
+                if (!titleEl.empty()) {
+                    // Title format is typically "source->target"
+                    const titleText = titleEl.text();
+                    const parts = titleText.split("->");
+                    if (parts.length === 2) {
+                        const sourceId = parts[0].trim();
+                        const targetId = parts[1].trim();
+                        
+                        let shouldHighlight = false;
+                        let isDirectConnection = false;
+                        
+                        // Check if nodes are highlighted according to current visualization mode
+                        const sourceHighlighted = sourceId === selectedService || 
+                            (viewMode === 'downstream' && (sourceId === selectedService || downstreamNodeIds.has(sourceId))) ||
+                            (viewMode === 'upstream' && (sourceId === selectedService || upstreamNodeIds.has(sourceId))) ||
+                            (viewMode === 'bidirectional' && (sourceId === selectedService || downstreamNodeIds.has(sourceId) || upstreamNodeIds.has(sourceId)));
+                            
+                        const targetHighlighted = targetId === selectedService || 
+                            (viewMode === 'downstream' && (targetId === selectedService || downstreamNodeIds.has(targetId))) ||
+                            (viewMode === 'upstream' && (targetId === selectedService || upstreamNodeIds.has(targetId))) ||
+                            (viewMode === 'bidirectional' && (targetId === selectedService || downstreamNodeIds.has(targetId) || upstreamNodeIds.has(targetId)));
+
+                        if (viewMode === 'single') {
+                            shouldHighlight = sourceId === selectedService || targetId === selectedService;
+                            isDirectConnection = sourceId === selectedService || targetId === selectedService;
+                        } else if (viewMode === 'downstream') {
+                            // If both nodes are highlighted in downstream mode, the edge should be highlighted too
+                            if (sourceHighlighted && targetHighlighted) {
+                                // Ensure direction is correct (from parent to child in dependency tree)
+                                const sourceHops = downstreamHops.get(sourceId) || Infinity;
+                                const targetHops = downstreamHops.get(targetId) || Infinity;
+                                
+                                // Allow the edge if it connects nodes in the correct direction of dependency flow
+                                shouldHighlight = sourceHops < targetHops || sourceId === selectedService;
+                            }
+                            isDirectConnection = sourceId === selectedService;
+                        } else if (viewMode === 'upstream') {
+                            // If both nodes are highlighted in upstream mode, the edge should be highlighted too
+                            if (sourceHighlighted && targetHighlighted) {
+                                // Ensure direction is correct (from child to parent in dependency tree)
+                                const sourceHops = upstreamHops.get(sourceId) || Infinity;
+                                const targetHops = upstreamHops.get(targetId) || Infinity;
+                                
+                                // Allow the edge if it connects nodes in the correct direction of dependency flow
+                                shouldHighlight = targetHops < sourceHops || targetId === selectedService;
+                            }
+                            isDirectConnection = targetId === selectedService;
+                        } else if (viewMode === 'bidirectional') {
+                            // If both nodes are highlighted in bidirectional mode, the edge should be highlighted
+                            if (sourceHighlighted && targetHighlighted) {
+                                shouldHighlight = true;
+                                
+                                // Additional check for valid path in the dependency tree
+                                const sourceUpHops = upstreamHops.get(sourceId) || Infinity;
+                                const targetUpHops = upstreamHops.get(targetId) || Infinity;
+                                const sourceDownHops = downstreamHops.get(sourceId) || Infinity;
+                                const targetDownHops = downstreamHops.get(targetId) || Infinity;
+                                
+                                // Check if this follows a valid path in the dependency graph
+                                if (sourceUpHops < Infinity && targetDownHops < Infinity) {
+                                    // This is a path from upstream to downstream
+                                    shouldHighlight = true;
+                                } else if (targetUpHops < Infinity && sourceDownHops < Infinity) {
+                                    // This is a path from downstream to upstream
+                                    shouldHighlight = true;
+                                } else if (sourceId === selectedService || targetId === selectedService) {
+                                    // Direct connection to the selected service
+                                    shouldHighlight = true;
+                                } else if (sourceUpHops < Infinity && targetUpHops < Infinity) {
+                                    // Both in upstream path
+                                    shouldHighlight = Math.abs(sourceUpHops - targetUpHops) === 1;
+                                } else if (sourceDownHops < Infinity && targetDownHops < Infinity) {
+                                    // Both in downstream path
+                                    shouldHighlight = Math.abs(sourceDownHops - targetDownHops) === 1;
+                                }
+                            }
+                            isDirectConnection = sourceId === selectedService || targetId === selectedService;
+                        }
+                        
+                        edge.classed("highlighted", shouldHighlight)
+                            .classed("faded", !shouldHighlight)
+                            .classed("selected-arrow", isDirectConnection && shouldHighlight);
+                    }
+                }
+            });
+        }
+        
+        // Helper function to find downstream nodes (nodes that depend on the selected service)
+        function findDownstreamNodes(serviceId, resultSet, hopsMap, maxHops) {
+            const currentHops = hopsMap.get(serviceId) || 0;
+            if (currentHops >= maxHops) return;
+            
+            // Find direct dependencies
+            const directDependencies = edges.filter(edge => edge.source === serviceId);
+            
+            directDependencies.forEach(edge => {
+                const targetId = edge.target;
+                const targetHops = currentHops + 1;
+                
+                // Only process if target is not yet visited or we found a shorter path
+                if (!hopsMap.has(targetId) || hopsMap.get(targetId) > targetHops) {
+                    resultSet.add(targetId);
+                    hopsMap.set(targetId, targetHops);
+                    
+                    // Recursively find dependencies of dependencies if under max hops
+                    if (targetHops < maxHops) {
+                        findDownstreamNodes(targetId, resultSet, hopsMap, maxHops);
+                    }
+                }
+            });
+        }
+        
+        // Helper function to find upstream nodes (nodes that the selected service depends on)
+        function findUpstreamNodes(serviceId, resultSet, hopsMap, maxHops) {
+            const currentHops = hopsMap.get(serviceId) || 0;
+            if (currentHops >= maxHops) return;
+            
+            // Find direct dependencies
+            const directDependencies = edges.filter(edge => edge.target === serviceId);
+            
+            directDependencies.forEach(edge => {
+                const sourceId = edge.source;
+                const sourceHops = currentHops + 1;
+                
+                // Only process if source is not yet visited or we found a shorter path
+                if (!hopsMap.has(sourceId) || hopsMap.get(sourceId) > sourceHops) {
+                    resultSet.add(sourceId);
+                    hopsMap.set(sourceId, sourceHops);
+                    
+                    // Recursively find dependencies of dependencies if under max hops
+                    if (sourceHops < maxHops) {
+                        findUpstreamNodes(sourceId, resultSet, hopsMap, maxHops);
+                    }
+                }
+            });
+        }
+
+        // Set up zoom controls
+        document.getElementById("zoom-in").addEventListener("click", function() {
+            graphviz.zoomIn();
+        });
+
+        document.getElementById("zoom-out").addEventListener("click", function() {
+            graphviz.zoomOut();
+        });
+
+        document.getElementById("reset").addEventListener("click", function() {
+            graphviz.resetZoom();
+            serviceSelect.value = "";
+            document.querySelector('input[name="view-mode"][value="all"]').checked = true;
+            updateView();
+        });
+
+        // Set up view mode and service select event listeners
+        document.querySelectorAll('input[name="view-mode"]').forEach(radio => {
+            radio.addEventListener("change", updateView);
+        });
+        
+        serviceSelect.addEventListener("change", updateView);
+        
+        // Set up hop limit slider
+        const hopLimitSlider = document.getElementById("hop-limit");
+        const hopValueDisplay = document.getElementById("hop-value");
+        const unlimitedHopsCheckbox = document.getElementById("unlimited-hops");
+        
+        hopLimitSlider.addEventListener("input", function() {
+            hopValueDisplay.textContent = this.value;
+            updateView();
+        });
+        
+        unlimitedHopsCheckbox.addEventListener("change", function() {
+            if (this.checked) {
+                hopLimitSlider.disabled = true;
+                hopValueDisplay.textContent = "∞";
+            } else {
+                hopLimitSlider.disabled = false;
+                hopValueDisplay.textContent = hopLimitSlider.value;
+            }
+            updateView();
+        });
+
+        // Handle window resize
+        window.addEventListener("resize", function() {
+            graphviz
+                .width(window.innerWidth)
+                .height(window.innerHeight)
+                .render();
+        });
+
+        // Initialize the graph
+        renderGraph();
+
+        // Add a "Share" button to the controls
+        function addShareButton() {
+            const controlsDiv = document.querySelector('.controls');
+            const shareButton = document.createElement('button');
+            shareButton.textContent = 'Share Graph';
+            shareButton.id = 'share-graph';
+            shareButton.title = 'Copy sharable link to clipboard';
+            controlsDiv.appendChild(shareButton);
+            
+            // Add event listener for the share button
+            shareButton.addEventListener('click', function() {
+                // Create shareable URL with current graph
+                const encodedGraph = encodeURIComponent(dotSource);
+                const shareableUrl = window.location.origin + 
+                                    window.location.pathname + 
+                                    '?graph=' + encodedGraph;
+                
+                // Copy to clipboard
+                navigator.clipboard.writeText(shareableUrl)
+                    .then(() => {
+                        // Temporarily change button text to indicate success
+                        const originalText = this.textContent;
+                        this.textContent = 'Link Copied!';
+                        setTimeout(() => {
+                            this.textContent = originalText;
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Could not copy URL: ', err);
+                        alert('Failed to copy URL. Please copy it manually: ' + shareableUrl);
+                    });
+            });
+        }
+        
+        // Call to add the share button after the page loads
+        document.addEventListener('DOMContentLoaded', addShareButton);
+    </script>
+</body>
+</html>
