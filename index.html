@@ -104,7 +104,35 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
             z-index: 1000;
-            width: 200px;
+        }
+        .controls-content {
+            display: none;
+        }
+        .controls.expanded .controls-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .controls-toggle {
+            font-size: 25px;
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1001;
+        }
+        .controls-toggle:hover {
+            background-color: #3367D6;
         }
         .controls h3 {
             margin: 0 0 10px 0;
@@ -230,41 +258,44 @@
             <div id="graph"></div>
         </div>
         <div class="controls">
-            <h3>Controls</h3>
-            <div class="view-mode">
-                <label>
-                    <input type="radio" name="view-mode" value="all" checked> Show All
-                </label>
-                <label>
-                    <input type="radio" name="view-mode" value="single"> Single
-                </label>
-                <label>
-                    <input type="radio" name="view-mode" value="bidirectional"> Bidirectional
-                </label>
-                <label>
-                    <input type="radio" name="view-mode" value="downstream"> Downstream
-                </label>
-                <label>
-                    <input type="radio" name="view-mode" value="upstream"> Upstream
-                </label>
-            </div>
-            <select id="node-select">
-                <option value="">Select a node...</option>
-            </select>
-            <div class="hop-limit">
-                <label>Max Hops: <span id="hop-value" class="hop-value">5</span></label>
-                <div class="slider-container">
-                    <input type="range" id="hop-limit" min="1" max="10" value="5">
+            <button id="controls-toggle" class="controls-toggle">⚙</button>
+            <div class="controls-content">
+                <h3>Controls</h3>
+                <div class="view-mode">
+                    <label>
+                        <input type="radio" name="view-mode" value="all" checked> Show All
+                    </label>
+                    <label>
+                        <input type="radio" name="view-mode" value="single"> Single
+                    </label>
+                    <label>
+                        <input type="radio" name="view-mode" value="bidirectional"> Bidirectional
+                    </label>
+                    <label>
+                        <input type="radio" name="view-mode" value="downstream"> Downstream
+                    </label>
+                    <label>
+                        <input type="radio" name="view-mode" value="upstream"> Upstream
+                    </label>
                 </div>
-                <div class="unlimited">
-                    <input type="checkbox" id="unlimited-hops">
-                    <label for="unlimited-hops">Unlimited Hops</label>
+                <select id="node-select">
+                    <option value="">Select a node...</option>
+                </select>
+                <div class="hop-limit">
+                    <label>Max Hops: <span id="hop-value" class="hop-value">5</span></label>
+                    <div class="slider-container">
+                        <input type="range" id="hop-limit" min="1" max="10" value="5">
+                    </div>
+                    <div class="unlimited">
+                        <input type="checkbox" id="unlimited-hops">
+                        <label for="unlimited-hops">Unlimited Hops</label>
+                    </div>
                 </div>
+                <button id="zoom-in">+</button>
+                <button id="zoom-out">-</button>
+                <button id="reset">Reset</button>
+                <button id="share-graph">Share Graph</button>
             </div>
-            <button id="zoom-in">+</button>
-            <button id="zoom-out">-</button>
-            <button id="reset">Reset</button>
-            <button id="share-graph">Share Graph</button>
         </div>
         <div class="tooltip" id="tooltip"></div>
     </div>
@@ -835,6 +866,13 @@
                 .width(window.innerWidth)
                 .height(window.innerHeight)
                 .render();
+        });
+
+        // Set up controls toggle
+        document.getElementById("controls-toggle").addEventListener("click", function() {
+            const controls = document.querySelector(".controls");
+            controls.classList.toggle("expanded");
+            this.textContent = controls.classList.contains("expanded") ? "×" : "⚙";
         });
 
         // Initialize the graph
