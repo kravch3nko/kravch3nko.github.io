@@ -1,0 +1,25 @@
+{
+  "name": "graphviz-editor",
+  "version": "1.0.0",
+  "description": "Interactive Graphviz DOT editor and visualizer",
+  "main": "index.html",
+  "scripts": {
+    "test": "jest",
+    "start": "serve"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "serve": "^14.2.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "moduleDirectories": [
+      "node_modules",
+      "."
+    ],
+    "setupFiles": [
+      "./tests/setup.js"
+    ]
+  }
+} 

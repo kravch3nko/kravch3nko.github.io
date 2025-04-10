@@ -1,0 +1,370 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    overflow: hidden;
+}
+.container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+#graph {
+    flex: 1;
+    background-color: white;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: width 0.3s;
+}
+.editor-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40%;
+    height: 100%;
+    background-color: #1e1e1e;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+    z-index: 900;
+    display: none;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    transform: translateX(-100%);
+}
+.editor-container.active {
+    transform: translateX(0);
+    display: flex;
+}
+#editor {
+    flex-grow: 1;
+    width: 100%;
+}
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background-color: #333;
+    color: white;
+}
+.editor-header h3 {
+    margin: 0;
+}
+.editor-buttons {
+    display: flex;
+    gap: 10px;
+}
+.editor-toggle {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    background-color: #4285F4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.editor-toggle:hover {
+    background-color: #3367D6;
+}
+.graph-container {
+    flex: 1;
+    display: flex;
+    transition: margin-left 0.3s;
+}
+.graph-container.editor-active {
+    margin-left: 40%;
+}
+.controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+}
+.controls-content {
+    display: none;
+}
+.controls.expanded .controls-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.controls-toggle {
+    font-size: 25px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: #4285F4;
+    color: white;
+    border: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: bold;
+    z-index: 1001;
+}
+.controls-toggle:hover {
+    background-color: #3367D6;
+}
+.controls h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #333;
+}
+.controls button {
+    padding: 8px 12px;
+    border: none;
+    background-color: #4285F4;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+.controls button:hover {
+    background-color: #3367D6;
+}
+.controls select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    width: 100%;
+}
+.controls .view-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.controls .view-mode label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+.controls .view-mode input {
+    margin: 0;
+}
+.hop-limit {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.hop-limit .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.hop-limit input[type="range"] {
+    flex: 1;
+}
+.hop-limit .hop-value {
+    font-weight: bold;
+    min-width: 25px;
+    text-align: center;
+}
+.hop-limit .unlimited {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+}
+.tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    max-width: 300px;
+    z-index: 1000;
+    white-space: pre-line;
+}
+.node:hover {
+    cursor: pointer;
+    filter: brightness(1.2);
+}
+.node text {
+    font-weight: bold;
+}
+.cluster {
+    opacity: 0.7;
+}
+.highlighted {
+    stroke: #FFD700;
+    stroke-width: 3px;
+}
+.faded {
+    opacity: 0.2;
+}
+.faded text, .edge.faded text {
+    opacity: 1;
+    fill-opacity: 1;
+}
+.edge.faded polygon {
+    opacity: 0.2;
+    fill-opacity: 0.2;
+}
+.selected-arrow {
+    stroke: #FF4500;
+    stroke-width: 4px;
+}
+.edge text, .highlighted text, .selected-arrow text {
+    stroke: none !important;
+    fill: #333333 !important;
+    font-weight: normal !important;
+}
+/* Exclude text from highlighting */
+.node.highlighted text {
+    stroke: none;
+    fill: #000000;
+}
+
+/* DOT validation status */
+#validation-status {
+    padding: 5px 10px;
+    color: white;
+    background-color: #333;
+    border-top: 1px solid #555;
+    font-size: 12px;
+    font-family: monospace;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+#validation-status.valid {
+    background-color: #2d882d !important;
+    box-shadow: 0 0 10px rgba(45, 136, 45, 0.5);
+}
+
+#validation-status.invalid {
+    background-color: #aa3333 !important;
+    box-shadow: 0 0 10px rgba(170, 51, 51, 0.5);
+}
+
+#validation-status.validating {
+    background-color: #666 !important;
+    box-shadow: 0 0 10px rgba(102, 102, 102, 0.5);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.8;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.8;
+    }
+}
+
+/* Syntax error highlighting in editor */
+.syntax-error {
+    background-color: rgba(255, 0, 0, 0.15);
+    border-bottom: 2px dotted red;
+}
+
+.syntax-error-inline {
+    background-color: rgba(255, 0, 0, 0.15);
+    border-bottom: 2px dotted red;
+}
+
+/* Make tooltips visible over editor content */
+.monaco-editor .monaco-hover {
+    z-index: 100;
+    background-color: rgba(30, 30, 30, 0.95) !important;
+}
+
+/* Glyph margin error indicator styling */
+.monaco-editor .codicon-error {
+    color: #f14c4c;
+    font-weight: bold;
+}
+
+.monaco-editor .margin-view-overlays .codicon-error:before {
+    content: "!";
+    color: white;
+    background-color: #f14c4c;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    margin-left: 3px;
+}
+
+/* Make the glyph margin more visible */
+.monaco-editor .margin {
+    background-color: rgba(30, 30, 30, 0.8) !important;
+}
+
+/* Auto-apply toggle styling */
+.auto-apply-container {
+    display: flex;
+    align-items: center;
+    margin-right: 10px;
+}
+
+.auto-apply-container input[type="checkbox"] {
+    position: relative;
+    width: 36px;
+    height: 18px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #333;
+    outline: none;
+    border-radius: 10px;
+    transition: 0.3s;
+    border: 1px solid #555;
+    margin-right: 8px;
+}
+
+.auto-apply-container input[type="checkbox"]:checked {
+    background: #4285F4;
+}
+
+.auto-apply-container input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    top: 1px;
+    left: 1px;
+    background: #ddd;
+    transition: 0.3s;
+}
+
+.auto-apply-container input[type="checkbox"]:checked::before {
+    left: 19px;
+}
+
+.auto-apply-container label {
+    color: white;
+    font-size: 12px;
+    user-select: none;
+} 
