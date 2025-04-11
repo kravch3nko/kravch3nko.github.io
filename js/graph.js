@@ -356,23 +356,22 @@ const Graph = (function() {
                     } else if (viewMode === 'downstream') {
                         // If both nodes are highlighted in downstream mode, the edge should be highlighted too
                         if (sourceHighlighted && targetHighlighted) {
-                            // Ensure direction is correct (from parent to child in dependency tree)
                             const sourceHops = downstreamHops.get(sourceId) || Infinity;
                             const targetHops = downstreamHops.get(targetId) || Infinity;
                             
                             // Allow the edge if it connects nodes in the correct direction of dependency flow
-                            shouldHighlight = sourceHops < targetHops || sourceId === selectedNodeId;
+                            // Remove the adjacency constraint to show all downstream connections
+                            shouldHighlight = true;
                         }
                         isDirectConnection = sourceId === selectedNodeId;
                     } else if (viewMode === 'upstream') {
                         // If both nodes are highlighted in upstream mode, the edge should be highlighted too
                         if (sourceHighlighted && targetHighlighted) {
-                            // Ensure direction is correct (from child to parent in dependency tree)
                             const sourceHops = upstreamHops.get(sourceId) || Infinity;
                             const targetHops = upstreamHops.get(targetId) || Infinity;
                             
-                            // Allow the edge if it connects nodes in the correct direction of dependency flow
-                            shouldHighlight = targetHops < sourceHops || targetId === selectedNodeId;
+                            // Remove the adjacency constraint to show all upstream connections
+                            shouldHighlight = true;
                         }
                         isDirectConnection = targetId === selectedNodeId;
                     } else if (viewMode === 'bidirectional') {
@@ -397,11 +396,11 @@ const Graph = (function() {
                                 // Direct connection to the selected service
                                 shouldHighlight = true;
                             } else if (sourceUpHops < Infinity && targetUpHops < Infinity) {
-                                // Both in upstream path
-                                shouldHighlight = Math.abs(sourceUpHops - targetUpHops) === 1;
+                                // Both in upstream path - highlight ALL connections in upstream path
+                                shouldHighlight = true; // Remove the adjacency constraint
                             } else if (sourceDownHops < Infinity && targetDownHops < Infinity) {
-                                // Both in downstream path
-                                shouldHighlight = Math.abs(sourceDownHops - targetDownHops) === 1;
+                                // Both in downstream path - highlight ALL connections in downstream path
+                                shouldHighlight = true; // Remove the adjacency constraint
                             }
                         }
                         isDirectConnection = sourceId === selectedNodeId || targetId === selectedNodeId;
