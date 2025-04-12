@@ -8,6 +8,7 @@ const Graph = (function() {
     let nodes = [];
     let edges = [];
     let currentDotSource = '';
+    let currentSelection = []; // Track multiple selections
     
     /**
      * Initialize the graphviz renderer.
@@ -54,6 +55,43 @@ const Graph = (function() {
                 .render();
         });
         
+        // Set up hop limit slider
+        const hopLimitSlider = document.getElementById("hop-limit");
+        const hopValueSpan = document.getElementById("hop-value");
+        const unlimitedHopsCheckbox = document.getElementById("unlimited-hops");
+        
+        if (hopLimitSlider && hopValueSpan) {
+            hopLimitSlider.addEventListener("input", function() {
+                hopValueSpan.textContent = this.value;
+                
+                // If we have active selections, reapply with new hop limit
+                if (currentSelection.length > 0) {
+                    // Update each selection with the new max hops
+                    currentSelection.forEach(selection => {
+                        selection.maxHops = parseInt(this.value);
+                    });
+                    applySelections();
+                }
+            });
+        }
+        
+        if (unlimitedHopsCheckbox) {
+            unlimitedHopsCheckbox.addEventListener("change", function() {
+                if (hopLimitSlider) {
+                    hopLimitSlider.disabled = this.checked;
+                }
+                
+                // If we have active selections, reapply with unlimited/limited hop setting
+                if (currentSelection.length > 0) {
+                    // Update each selection with the new max hops
+                    currentSelection.forEach(selection => {
+                        selection.maxHops = this.checked ? 100 : (hopLimitSlider ? parseInt(hopLimitSlider.value) : 5);
+                    });
+                    applySelections();
+                }
+            });
+        }
+        
         // Render the graph
         renderGraph(onNodeClick);
         
@@ -70,7 +108,8 @@ const Graph = (function() {
             graphviz.resetZoom();
             document.getElementById("node-select").value = "";
             document.querySelector('input[name="view-mode"][value="downstream"]').checked = true;
-            updateView();
+            resetHighlights();
+            currentSelection = []; // Clear selections on reset
         });
         
         // Set up controls toggle
@@ -83,6 +122,14 @@ const Graph = (function() {
         // Set up share button
         document.getElementById("share-graph").addEventListener("click", function() {
             Utils.shareGraph(currentDotSource, this);
+        });
+        
+        // Set up escape key to clear selections
+        document.addEventListener("keydown", function(event) {
+            if (event.key === "Escape") {
+                resetHighlights();
+                currentSelection = [];
+            }
         });
     }
     
@@ -119,17 +166,147 @@ const Graph = (function() {
                                 .style("left", (event.pageX + 10) + "px")
                                 .style("top", (event.pageY - 20) + "px");
                         })
-                        .on("click", function() {
-                            const nodeId = d3.select(this).select("text").text();
-                            if (onNodeClick) {
-                                onNodeClick(nodeId);
+                        .on("click", function(event) {
+                            const nodeId = getNodeId(this);
+                            if (nodeId) {
+                                handleNodeClick(nodeId, event, onNodeClick);
                             }
+                        });
+                        
+                    // Set up edge interactions
+                    d3.selectAll(".edge")
+                        .on("mouseover", function() {
+                            d3.select(this).select("path").style("stroke-width", "3px");
+                            d3.select(this).select("text").style("fill-opacity", "1");
+                        })
+                        .on("mouseout", function() {
+                            const isHighlighted = d3.select(this).classed("highlighted");
+                            d3.select(this).select("path")
+                                .style("stroke-width", isHighlighted ? "2px" : "1px");
+                            d3.select(this).select("text")
+                                .style("fill-opacity", isHighlighted ? "1" : "0.5");
                         });
                 });
         } catch (error) {
             console.error("Error rendering graph:", error);
             showRenderingError();
         }
+    }
+    
+    /**
+     * Handle node click events with multi-selection support.
+     * 
+     * @param {string} nodeId - ID of the clicked node
+     * @param {Event} event - Click event
+     * @param {Function} onNodeClick - Callback when a node is clicked
+     */
+    function handleNodeClick(nodeId, event, onNodeClick) {
+        // Get the current view mode
+        const viewModeInput = document.querySelector('input[name="view-mode"]:checked');
+        const viewMode = viewModeInput ? viewModeInput.value : 'downstream'; // Default to downstream if not found
+        
+        // Get max hops, checking for unlimited hops first
+        let maxHops = 5; // Default fallback
+        const unlimitedHopsCheckbox = document.getElementById("unlimited-hops");
+        const hopLimitSlider = document.getElementById("hop-limit");
+        
+        if (unlimitedHopsCheckbox && unlimitedHopsCheckbox.checked) {
+            // Use a very high value for unlimited hops
+            maxHops = 100;
+        } else if (hopLimitSlider) {
+            // Use the slider value
+            maxHops = parseInt(hopLimitSlider.value);
+            if (isNaN(maxHops) || maxHops <= 0) {
+                maxHops = 5; // Fallback if value is invalid
+            }
+        }
+        
+        console.log(`Max hops: ${maxHops}, View mode: ${viewMode}`);
+        
+        // Create selection object
+        const selection = {
+            nodeId: nodeId,
+            viewMode: viewMode,
+            maxHops: maxHops
+        };
+        
+        // Handle multi-selection with Ctrl/Cmd or Shift key
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            // Add to current selection if not already selected
+            if (!currentSelection.some(s => s.nodeId === nodeId)) {
+                currentSelection.push(selection);
+            }
+        } else {
+            // Replace selection
+            currentSelection = [selection];
+        }
+        
+        // Apply highlighting for all selections
+        applySelections();
+        
+        // Call the callback
+        if (onNodeClick) {
+            onNodeClick(nodeId);
+        }
+    }
+    
+    /**
+     * Apply all current selections to the graph.
+     */
+    function applySelections() {
+        // Reset all highlights first
+        resetHighlights();
+        
+        // Process each selection
+        currentSelection.forEach(selection => {
+            updateView(selection.nodeId, selection.viewMode, selection.maxHops);
+        });
+        
+        // Always highlight legend elements if present
+        highlightLegendElements();
+    }
+    
+    /**
+     * Reset all highlights in the graph.
+     */
+    function resetHighlights() {
+        d3.selectAll(".node")
+            .classed("highlighted", false)
+            .classed("faded", false)
+            .classed("selected", false);
+            
+        d3.selectAll(".edge")
+            .classed("highlighted", false)
+            .classed("faded", false)
+            .classed("selected-arrow", false);
+            
+        d3.selectAll(".cluster")
+            .classed("highlighted-cluster", false)
+            .classed("faded-cluster", false);
+    }
+    
+    /**
+     * Highlight legend elements in the graph.
+     */
+    function highlightLegendElements() {
+        // Find legend nodes and edges (typically in a subgraph named "cluster_legend")
+        d3.selectAll(".cluster").each(function() {
+            const clusterId = d3.select(this).attr("id") || "";
+            if (clusterId.includes("legend") || clusterId.includes("Legend")) {
+                // This is a legend cluster, highlight it and its contents
+                d3.select(this).classed("highlighted-cluster", true).classed("faded-cluster", false);
+                
+                // Highlight all nodes in the legend
+                d3.select(this).selectAll(".node")
+                    .classed("highlighted", true)
+                    .classed("faded", false);
+                    
+                // Highlight all edges in the legend
+                d3.select(this).selectAll(".edge")
+                    .classed("highlighted", true)
+                    .classed("faded", false);
+            }
+        });
     }
     
     /**
@@ -245,6 +422,9 @@ const Graph = (function() {
             nodes = parsed.nodes;
             edges = parsed.edges;
             
+            // Reset selections
+            currentSelection = [];
+            
             // Render the updated graph with sanitization
             renderGraph(onNodeClick);
             
@@ -257,6 +437,53 @@ const Graph = (function() {
     }
     
     /**
+     * Get a node's ID from its SVG element.
+     * 
+     * @param {SVGElement} nodeElement - The node SVG element
+     * @returns {string|null} The node ID or null if not found
+     */
+    function getNodeId(nodeElement) {
+        // Try to get from title first
+        const title = d3.select(nodeElement).select("title");
+        if (!title.empty()) {
+            return title.text();
+        }
+        
+        // Try to get from text
+        const text = d3.select(nodeElement).select("text");
+        if (!text.empty()) {
+            return text.text();
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get an edge's source and target nodes.
+     * 
+     * @param {SVGElement} edgeElement - The edge SVG element
+     * @returns {Object|null} Object with source and target, or null if not found
+     */
+    function getEdgeNodes(edgeElement) {
+        // Try to get from title
+        const title = d3.select(edgeElement).select("title");
+        if (!title.empty()) {
+            const titleText = title.text();
+            if (titleText.includes('->')) {
+                const parts = titleText.split("->");
+                if (parts.length === 2) {
+                    return {
+                        source: parts[0].trim(),
+                        target: parts[1].trim()
+                    };
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
      * Update the view based on selected node and view mode.
      * 
      * @param {string} selectedNodeId - ID of the selected node
@@ -264,164 +491,230 @@ const Graph = (function() {
      * @param {number} maxHops - Maximum number of hops
      */
     function updateView(selectedNodeId, viewMode, maxHops) {
+        // Skip if no node selected or showing all
         if (!selectedNodeId || viewMode === 'all') {
-            // Reset to show all nodes and edges
-            d3.selectAll(".node").classed("highlighted", false).classed("faded", false);
-            d3.selectAll(".edge").classed("highlighted", false).classed("faded", false).classed("selected-arrow", false);
             return;
         }
         
-        // Find all edges connected to the selected service
-        const connectedEdges = edges.filter(edge => 
-            edge.source === selectedNodeId || edge.target === selectedNodeId
-        );
+        console.log(`Updating view: node=${selectedNodeId}, mode=${viewMode}, maxHops=${maxHops}`);
         
-        // Find all nodes connected to the selected service
-        const connectedNodeIds = new Set();
-        connectedNodeIds.add(selectedNodeId);
-        
-        connectedEdges.forEach(edge => {
-            connectedNodeIds.add(edge.source);
-            connectedNodeIds.add(edge.target);
-        });
-        
-        // Find downstream nodes (nodes that depend on the selected service) with hop limit
-        const downstreamNodeIds = new Set();
-        const downstreamHops = new Map(); // Track hops for each node
-        if (viewMode === 'downstream' || viewMode === 'bidirectional') {
-            downstreamHops.set(selectedNodeId, 0); // Starting node has 0 hops
-            Parser.findDownstreamNodes(selectedNodeId, downstreamNodeIds, downstreamHops, maxHops, edges);
-        }
-        
-        // Find upstream nodes (nodes that the selected service depends on) with hop limit
-        const upstreamNodeIds = new Set();
-        const upstreamHops = new Map(); // Track hops for each node
-        if (viewMode === 'upstream' || viewMode === 'bidirectional') {
-            upstreamHops.set(selectedNodeId, 0); // Starting node has 0 hops
-            Parser.findUpstreamNodes(selectedNodeId, upstreamNodeIds, upstreamHops, maxHops, edges);
-        }
-        
-        // Apply highlighting based on view mode
-        d3.selectAll(".node").each(function() {
-            const nodeId = d3.select(this).select("text").text();
-            let shouldHighlight = false;
+        // Ensure maxHops is a valid number
+        maxHops = (maxHops === undefined || isNaN(parseInt(maxHops)) || parseInt(maxHops) <= 0) 
+            ? 5   // Default if not specified or invalid
+            : parseInt(maxHops);
             
-            if (viewMode === 'single') {
-                shouldHighlight = nodeId === selectedNodeId || connectedNodeIds.has(nodeId);
-            } else if (viewMode === 'downstream') {
-                shouldHighlight = nodeId === selectedNodeId || downstreamNodeIds.has(nodeId);
-            } else if (viewMode === 'upstream') {
-                shouldHighlight = nodeId === selectedNodeId || upstreamNodeIds.has(nodeId);
-            } else if (viewMode === 'bidirectional') {
-                shouldHighlight = nodeId === selectedNodeId || 
-                                 downstreamNodeIds.has(nodeId) || 
-                                 upstreamNodeIds.has(nodeId);
+        // Get graph connections
+        const connections = getGraphConnections();
+        
+        // Find nodes to highlight based on the selected view mode
+        const nodesToHighlight = new Set([selectedNodeId]);
+        const edgesToHighlight = new Set();
+        const directEdges = new Set();
+        
+        if (viewMode === 'single') {
+            // For single mode, add direct connections only
+            if (connections.outgoing[selectedNodeId]) {
+                connections.outgoing[selectedNodeId].forEach(targetId => {
+                    nodesToHighlight.add(targetId);
+                    const edgeId = `${selectedNodeId}->${targetId}`;
+                    edgesToHighlight.add(edgeId);
+                    directEdges.add(edgeId);
+                });
             }
             
-            d3.select(this)
-                .classed("highlighted", shouldHighlight)
-                .classed("faded", !shouldHighlight);
+            if (connections.incoming[selectedNodeId]) {
+                connections.incoming[selectedNodeId].forEach(sourceId => {
+                    nodesToHighlight.add(sourceId);
+                    const edgeId = `${sourceId}->${selectedNodeId}`;
+                    edgesToHighlight.add(edgeId);
+                    directEdges.add(edgeId);
+                });
+            }
+        } else {
+            // For other modes, do traversal
+            if (viewMode === 'downstream' || viewMode === 'bidirectional') {
+                traverseConnections('downstream', selectedNodeId, maxHops, connections, 
+                                    nodesToHighlight, edgesToHighlight, directEdges);
+            }
+            
+            if (viewMode === 'upstream' || viewMode === 'bidirectional') {
+                traverseConnections('upstream', selectedNodeId, maxHops, connections, 
+                                    nodesToHighlight, edgesToHighlight, directEdges);
+            }
+        }
+        
+        // Apply highlighting to nodes
+        d3.selectAll(".node").each(function() {
+            const nodeId = getNodeId(this);
+            if (nodeId) {
+                const isHighlighted = nodesToHighlight.has(nodeId);
+                const isSelected = nodeId === selectedNodeId;
+                
+                // If the node is already highlighted from another selection, keep it highlighted
+                const wasHighlighted = d3.select(this).classed("highlighted");
+                
+                d3.select(this)
+                    .classed("highlighted", isHighlighted || wasHighlighted)
+                    .classed("faded", !isHighlighted && !wasHighlighted)
+                    .classed("selected", isSelected || d3.select(this).classed("selected"));
+            }
         });
         
         // Apply highlighting to edges
         d3.selectAll(".edge").each(function() {
-            const edge = d3.select(this);
-            // Get the title element inside the edge which contains source and target
-            const titleEl = edge.select("title");
-            if (!titleEl.empty()) {
-                // Title format is typically "source->target"
-                const titleText = titleEl.text();
-                const parts = titleText.split("->");
-                if (parts.length === 2) {
-                    const sourceId = parts[0].trim();
-                    const targetId = parts[1].trim();
-                    
-                    let shouldHighlight = false;
-                    let isDirectConnection = false;
-                    
-                    // Check if nodes are highlighted according to current visualization mode
-                    const sourceHighlighted = sourceId === selectedNodeId || 
-                        (viewMode === 'downstream' && (sourceId === selectedNodeId || downstreamNodeIds.has(sourceId))) ||
-                        (viewMode === 'upstream' && (sourceId === selectedNodeId || upstreamNodeIds.has(sourceId))) ||
-                        (viewMode === 'bidirectional' && (sourceId === selectedNodeId || downstreamNodeIds.has(sourceId) || upstreamNodeIds.has(sourceId)));
-                        
-                    const targetHighlighted = targetId === selectedNodeId || 
-                        (viewMode === 'downstream' && (targetId === selectedNodeId || downstreamNodeIds.has(targetId))) ||
-                        (viewMode === 'upstream' && (targetId === selectedNodeId || upstreamNodeIds.has(targetId))) ||
-                        (viewMode === 'bidirectional' && (targetId === selectedNodeId || downstreamNodeIds.has(targetId) || upstreamNodeIds.has(targetId)));
-
-                    if (viewMode === 'single') {
-                        shouldHighlight = sourceId === selectedNodeId || targetId === selectedNodeId;
-                        isDirectConnection = sourceId === selectedNodeId || targetId === selectedNodeId;
-                    } else if (viewMode === 'downstream') {
-                        // If both nodes are highlighted in downstream mode, the edge should be highlighted too
-                        if (sourceHighlighted && targetHighlighted) {
-                            const sourceHops = downstreamHops.get(sourceId) || Infinity;
-                            const targetHops = downstreamHops.get(targetId) || Infinity;
-                            
-                            // Allow the edge if it connects nodes in the correct direction of dependency flow
-                            // Remove the adjacency constraint to show all downstream connections
-                            shouldHighlight = true;
-                        }
-                        isDirectConnection = sourceId === selectedNodeId;
-                    } else if (viewMode === 'upstream') {
-                        // If both nodes are highlighted in upstream mode, the edge should be highlighted too
-                        if (sourceHighlighted && targetHighlighted) {
-                            const sourceHops = upstreamHops.get(sourceId) || Infinity;
-                            const targetHops = upstreamHops.get(targetId) || Infinity;
-                            
-                            // Remove the adjacency constraint to show all upstream connections
-                            shouldHighlight = true;
-                        }
-                        isDirectConnection = targetId === selectedNodeId;
-                    } else if (viewMode === 'bidirectional') {
-                        // If both nodes are highlighted in bidirectional mode, the edge should be highlighted
-                        if (sourceHighlighted && targetHighlighted) {
-                            shouldHighlight = true;
-                            
-                            // Additional check for valid path in the dependency tree
-                            const sourceUpHops = upstreamHops.get(sourceId) || Infinity;
-                            const targetUpHops = upstreamHops.get(targetId) || Infinity;
-                            const sourceDownHops = downstreamHops.get(sourceId) || Infinity;
-                            const targetDownHops = downstreamHops.get(targetId) || Infinity;
-                            
-                            // Check if this follows a valid path in the dependency graph
-                            if (sourceUpHops < Infinity && targetDownHops < Infinity) {
-                                // This is a path from upstream to downstream
-                                shouldHighlight = true;
-                            } else if (targetUpHops < Infinity && sourceDownHops < Infinity) {
-                                // This is a path from downstream to upstream
-                                shouldHighlight = true;
-                            } else if (sourceId === selectedNodeId || targetId === selectedNodeId) {
-                                // Direct connection to the selected service
-                                shouldHighlight = true;
-                            } else if (sourceUpHops < Infinity && targetUpHops < Infinity) {
-                                // Both in upstream path - highlight ALL connections in upstream path
-                                shouldHighlight = true; // Remove the adjacency constraint
-                            } else if (sourceDownHops < Infinity && targetDownHops < Infinity) {
-                                // Both in downstream path - highlight ALL connections in downstream path
-                                shouldHighlight = true; // Remove the adjacency constraint
-                            }
-                        }
-                        isDirectConnection = sourceId === selectedNodeId || targetId === selectedNodeId;
-                    }
-                    
-                    // Make sure edge labels stay visible and properly styled
-                    edge.selectAll("text").each(function() {
-                        const textElement = d3.select(this);
-                        textElement
-                            .style("opacity", "1")
-                            .style("fill-opacity", "1")
-                            .style("fill", "#333333")
-                            .style("stroke", "none")
-                            .style("font-weight", "normal");
-                    });
-                    
-                    edge.classed("highlighted", shouldHighlight)
-                        .classed("faded", !shouldHighlight)
-                        .classed("selected-arrow", isDirectConnection && shouldHighlight);
+            const edgeNodes = getEdgeNodes(this);
+            if (edgeNodes) {
+                const source = edgeNodes.source;
+                const target = edgeNodes.target;
+                const edgeId = `${source}->${target}`;
+                
+                const isHighlighted = edgesToHighlight.has(edgeId);
+                const isDirectConnection = directEdges.has(edgeId);
+                
+                // If the edge is already highlighted from another selection, keep it highlighted
+                const wasHighlighted = d3.select(this).classed("highlighted");
+                const wasDirectConnection = d3.select(this).classed("selected-arrow");
+                
+                d3.select(this)
+                    .classed("highlighted", isHighlighted || wasHighlighted)
+                    .classed("faded", !isHighlighted && !wasHighlighted)
+                    .classed("selected-arrow", (isDirectConnection && isHighlighted) || wasDirectConnection);
+            }
+        });
+        
+        // Apply highlighting to clusters
+        updateClusterHighlighting(nodesToHighlight);
+    }
+    
+    /**
+     * Get connections between nodes in the graph.
+     * 
+     * @returns {Object} Object with outgoing and incoming connections
+     */
+    function getGraphConnections() {
+        const connections = {
+            outgoing: {}, // source -> [targets]
+            incoming: {}  // target -> [sources]
+        };
+        
+        // Initialize connection arrays for all nodes
+        d3.selectAll(".node").each(function() {
+            const nodeId = getNodeId(this);
+            if (nodeId) {
+                connections.outgoing[nodeId] = [];
+                connections.incoming[nodeId] = [];
+            }
+        });
+        
+        // Add connections from edges
+        d3.selectAll(".edge").each(function() {
+            const edgeNodes = getEdgeNodes(this);
+            if (edgeNodes && edgeNodes.source && edgeNodes.target) {
+                const { source, target } = edgeNodes;
+                
+                // Make sure the arrays exist
+                if (!connections.outgoing[source]) connections.outgoing[source] = [];
+                if (!connections.incoming[target]) connections.incoming[target] = [];
+                
+                // Add connections if not already added
+                if (!connections.outgoing[source].includes(target)) {
+                    connections.outgoing[source].push(target);
+                }
+                if (!connections.incoming[target].includes(source)) {
+                    connections.incoming[target].push(source);
                 }
             }
+        });
+        
+        return connections;
+    }
+    
+    /**
+     * Traverse connections in the specified direction.
+     * 
+     * @param {string} direction - 'upstream' or 'downstream'
+     * @param {string} startNodeId - ID of the starting node
+     * @param {number} maxHops - Maximum number of hops
+     * @param {Object} connections - Object with outgoing and incoming connections
+     * @param {Set} nodesToHighlight - Set of nodes to highlight (modified in place)
+     * @param {Set} edgesToHighlight - Set of edges to highlight (modified in place)
+     * @param {Set} directEdges - Set of direct edges (modified in place)
+     */
+    function traverseConnections(direction, startNodeId, maxHops, connections, 
+                                nodesToHighlight, edgesToHighlight, directEdges) {
+        // Track visited nodes with distances
+        const visited = new Map();
+        visited.set(startNodeId, 0);
+        
+        // Queue for BFS
+        const queue = [{ id: startNodeId, distance: 0 }];
+        
+        while (queue.length > 0) {
+            const { id: currentId, distance } = queue.shift();
+            
+            // Stop if we've reached max hops
+            if (distance >= maxHops) {
+                continue;
+            }
+            
+            // Get neighbors based on direction
+            const neighbors = direction === 'downstream' 
+                ? connections.outgoing[currentId] || []
+                : connections.incoming[currentId] || [];
+            
+            for (const neighborId of neighbors) {
+                // Create edge ID based on direction
+                const edgeId = direction === 'downstream'
+                    ? `${currentId}->${neighborId}`
+                    : `${neighborId}->${currentId}`;
+                
+                // Add the edge
+                edgesToHighlight.add(edgeId);
+                
+                // Mark direct connections from start node
+                if (currentId === startNodeId) {
+                    directEdges.add(edgeId);
+                }
+                
+                // If we haven't visited this neighbor or found a shorter path
+                if (!visited.has(neighborId) || visited.get(neighborId) > distance + 1) {
+                    // Add to highlight set and visited
+                    nodesToHighlight.add(neighborId);
+                    visited.set(neighborId, distance + 1);
+                    
+                    // Add to queue
+                    queue.push({ id: neighborId, distance: distance + 1 });
+                }
+            }
+        }
+    }
+    
+    /**
+     * Update cluster highlighting based on highlighted nodes.
+     * 
+     * @param {Set} nodesToHighlight - Set of nodes to highlight
+     */
+    function updateClusterHighlighting(nodesToHighlight) {
+        d3.selectAll(".cluster").each(function() {
+            // Skip legend clusters which are always highlighted
+            const clusterId = d3.select(this).attr("id") || "";
+            if (clusterId.includes("legend") || clusterId.includes("Legend")) {
+                return;
+            }
+            
+            // Check if any node in this cluster should be highlighted
+            const containsHighlightedNode = Array.from(
+                d3.select(this).selectAll(".node").nodes()
+            ).some(nodeEl => {
+                const nodeId = getNodeId(nodeEl);
+                return nodeId && nodesToHighlight.has(nodeId);
+            });
+            
+            // Apply highlighting
+            const wasHighlighted = d3.select(this).classed("highlighted-cluster");
+            d3.select(this)
+                .classed("highlighted-cluster", containsHighlightedNode || wasHighlighted)
+                .classed("faded-cluster", !containsHighlightedNode && !wasHighlighted);
         });
     }
     
