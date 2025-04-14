@@ -606,17 +606,54 @@ const Graph = (function() {
             }
         });
         
-        // Add connections from edges
+        // Use the parsed edges from Parser, which will include invisible edges
+        edges.forEach(edge => {
+            const source = edge.source;
+            const target = edge.target;
+            
+            // Skip if source or target is invalid
+            if (!source || !target || source === target) {
+                return;
+            }
+            
+            // Ensure arrays exist
+            if (!connections.outgoing[source]) {
+                connections.outgoing[source] = [];
+            }
+            if (!connections.incoming[target]) {
+                connections.incoming[target] = [];
+            }
+            
+            // Add connection if not already added
+            if (!connections.outgoing[source].includes(target)) {
+                connections.outgoing[source].push(target);
+            }
+            if (!connections.incoming[target].includes(source)) {
+                connections.incoming[target].push(source);
+            }
+        });
+        
+        // Also check visible edges in the DOM as a fallback
         d3.selectAll(".edge").each(function() {
             const edgeNodes = getEdgeNodes(this);
             if (edgeNodes && edgeNodes.source && edgeNodes.target) {
-                const { source, target } = edgeNodes;
+                const source = edgeNodes.source;
+                const target = edgeNodes.target;
                 
-                // Make sure the arrays exist
-                if (!connections.outgoing[source]) connections.outgoing[source] = [];
-                if (!connections.incoming[target]) connections.incoming[target] = [];
+                // Skip if invalid
+                if (source === target) {
+                    return;
+                }
                 
-                // Add connections if not already added
+                // Ensure arrays exist
+                if (!connections.outgoing[source]) {
+                    connections.outgoing[source] = [];
+                }
+                if (!connections.incoming[target]) {
+                    connections.incoming[target] = [];
+                }
+                
+                // Add connection if not already added
                 if (!connections.outgoing[source].includes(target)) {
                     connections.outgoing[source].push(target);
                 }
