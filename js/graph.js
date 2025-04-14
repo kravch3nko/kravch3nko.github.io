@@ -96,33 +96,47 @@ const Graph = (function() {
         renderGraph(onNodeClick);
         
         // Set up zoom controls
-        document.getElementById("zoom-in").addEventListener("click", function() {
-            graphviz.zoomIn();
-        });
+        const zoomInBtn = document.getElementById("zoom-in");
+        if (zoomInBtn) {
+            zoomInBtn.addEventListener("click", function() {
+                graphviz.zoomIn();
+            });
+        }
 
-        document.getElementById("zoom-out").addEventListener("click", function() {
-            graphviz.zoomOut();
-        });
+        const zoomOutBtn = document.getElementById("zoom-out");
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener("click", function() {
+                graphviz.zoomOut();
+            });
+        }
 
-        document.getElementById("reset").addEventListener("click", function() {
-            graphviz.resetZoom();
-            document.getElementById("node-select").value = "";
-            document.querySelector('input[name="view-mode"][value="downstream"]').checked = true;
-            resetHighlights();
-            currentSelection = []; // Clear selections on reset
-        });
+        const resetBtn = document.getElementById("reset");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function() {
+                graphviz.resetZoom();
+                const nodeSelect = document.getElementById("node-select");
+                if (nodeSelect) {
+                    nodeSelect.value = "";
+                }
+                const viewModeRadio = document.querySelector('input[name="view-mode"][value="downstream"]');
+                if (viewModeRadio) {
+                    viewModeRadio.checked = true;
+                }
+                resetHighlights();
+                currentSelection = []; // Clear selections on reset
+            });
+        }
         
-        // Set up controls toggle
-        document.getElementById("controls-toggle").addEventListener("click", function() {
-            const controls = document.querySelector(".controls");
-            controls.classList.toggle("expanded");
-            this.textContent = controls.classList.contains("expanded") ? "×" : "⚙";
-        });
+        // Improved controls toggle with multiple approaches
+        setupControlsToggle();
         
         // Set up share button
-        document.getElementById("share-graph").addEventListener("click", function() {
-            Utils.shareGraph(currentDotSource, this);
-        });
+        const shareBtn = document.getElementById("share-graph");
+        if (shareBtn) {
+            shareBtn.addEventListener("click", function() {
+                Utils.shareGraph(currentDotSource, this);
+            });
+        }
         
         // Set up escape key to clear selections
         document.addEventListener("keydown", function(event) {
@@ -131,6 +145,81 @@ const Graph = (function() {
                 currentSelection = [];
             }
         });
+    }
+    
+    /**
+     * Set up the controls toggle button with multiple fallback methods
+     */
+    function setupControlsToggle() {
+        const toggleButton = document.getElementById("controls-toggle");
+        if (!toggleButton) {
+            console.warn("Controls toggle button not found");
+            return;
+        }
+        
+        const controls = document.querySelector(".controls");
+        if (!controls) {
+            console.warn("Controls container not found");
+            return;
+        }
+        
+        // Make sure controls start expanded
+        controls.classList.add("expanded");
+        toggleButton.textContent = "×";
+        
+        // Force any existing inline styles to be removed that might interfere
+        controls.style.display = "";
+        
+        // Remove any existing click listeners to prevent duplicates
+        toggleButton.removeEventListener("click", toggleControls);
+        
+        // Add our new click listener
+        toggleButton.addEventListener("click", toggleControls);
+        
+        // Also handle it through jQuery if available for maximum compatibility
+        if (window.$ && typeof window.$ === 'function') {
+            try {
+                $(toggleButton).off("click").on("click", toggleControls);
+            } catch (e) {
+                console.warn("jQuery event binding failed:", e);
+            }
+        }
+        
+        // Function to toggle the controls
+        function toggleControls(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // Toggle the expanded class
+            controls.classList.toggle("expanded");
+            
+            // Ensure display property is set correctly based on expanded state
+            if (controls.classList.contains("expanded")) {
+                toggleButton.textContent = "×";
+                controls.style.display = ""; // Use CSS default
+            } else {
+                toggleButton.textContent = "⚙";
+                controls.style.display = "none"; // Force hidden if class doesn't work
+            }
+            
+            console.log("Controls toggled. Expanded:", controls.classList.contains("expanded"));
+        }
+        
+        // Add a backup global access method
+        window.toggleGraphControls = toggleControls;
+        
+        // Also handle the toggle on DOMContentLoaded to ensure it's set up properly
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function() {
+                // Reattach the event listener after DOM is fully loaded
+                toggleButton.removeEventListener("click", toggleControls);
+                toggleButton.addEventListener("click", toggleControls);
+            });
+        }
+        
+        console.log("Controls toggle initialized");
     }
     
     /**
@@ -404,6 +493,24 @@ const Graph = (function() {
     }
     
     /**
+     * Make the graph deterministic by ensuring consistent layout.
+     * 
+     * @param {string} dotSource - The DOT source
+     * @returns {string} Modified DOT source with deterministic settings
+     */
+    function makeGraphDeterministic(dotSource) {
+        // If the DOT source already contains layout settings, don't modify it
+        if (dotSource.includes("layout=") || dotSource.includes("ordering=")) {
+            return dotSource;
+        }
+        
+        // Add deterministic settings to the graph
+        // Insert after the first opening brace of the digraph
+        return dotSource.replace(/(\b(?:di)?graph\s+[A-Za-z0-9_]*\s*\{)/,
+            '$1\n  // Deterministic layout settings\n  layout="dot";\n  ordering=out;\n  rankdir="LR";\n');
+    }
+    
+    /**
      * Update the graph with new DOT source.
      * 
      * @param {string} newDotSource - New DOT source
@@ -411,6 +518,9 @@ const Graph = (function() {
      */
     function updateGraph(newDotSource, onNodeClick) {
         try {
+            // Make the graph deterministic
+            newDotSource = makeGraphDeterministic(newDotSource);
+            
             // Update the DOT source
             currentDotSource = newDotSource;
             
@@ -560,25 +670,56 @@ const Graph = (function() {
             }
         });
         
-        // Apply highlighting to edges
+        // Create a map of edge elements by their source->target for faster lookup
+        const edgeElementMap = new Map();
+        
+        // First pass: build the edge element map
         d3.selectAll(".edge").each(function() {
             const edgeNodes = getEdgeNodes(this);
-            if (edgeNodes) {
-                const source = edgeNodes.source;
-                const target = edgeNodes.target;
-                const edgeId = `${source}->${target}`;
-                
-                const isHighlighted = edgesToHighlight.has(edgeId);
+            if (edgeNodes && edgeNodes.source && edgeNodes.target) {
+                const edgeId = `${edgeNodes.source}->${edgeNodes.target}`;
+                edgeElementMap.set(edgeId, this);
+            }
+        });
+        
+        // Apply highlighting to edges using the edgeElementMap
+        edgesToHighlight.forEach(edgeId => {
+            // Get the edge element from the map
+            const edgeElement = edgeElementMap.get(edgeId);
+            
+            if (edgeElement) {
                 const isDirectConnection = directEdges.has(edgeId);
                 
-                // If the edge is already highlighted from another selection, keep it highlighted
-                const wasHighlighted = d3.select(this).classed("highlighted");
-                const wasDirectConnection = d3.select(this).classed("selected-arrow");
+                // Apply highlighting classes
+                d3.select(edgeElement)
+                    .classed("highlighted", true)
+                    .classed("faded", false)
+                    .classed("selected-arrow", isDirectConnection);
+                    
+                // Apply additional styles to ensure visibility
+                d3.select(edgeElement).select("path")
+                    .style("stroke-width", isDirectConnection ? "2.5px" : "1.5px")
+                    .style("stroke-opacity", "1");
+                    
+                d3.select(edgeElement).selectAll("text")
+                    .style("fill-opacity", "1");
+            }
+        });
+        
+        // Fade non-highlighted edges
+        d3.selectAll(".edge").each(function() {
+            const edge = d3.select(this);
+            if (!edge.classed("highlighted")) {
+                edge.classed("faded", true);
                 
-                d3.select(this)
-                    .classed("highlighted", isHighlighted || wasHighlighted)
-                    .classed("faded", !isHighlighted && !wasHighlighted)
-                    .classed("selected-arrow", (isDirectConnection && isHighlighted) || wasDirectConnection);
+                // Make path semi-transparent
+                edge.select("path")
+                    .style("stroke-opacity", "0.3")
+                    .style("stroke-width", "1px");
+                    
+                // Make text semi-transparent
+                edge.selectAll("text")
+                    .style("fill-opacity", "0.3");
             }
         });
         
