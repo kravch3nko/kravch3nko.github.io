@@ -227,6 +227,9 @@ const Graph = (function() {
             // Add some basic sanitization to prevent common errors
             const sanitizedDotSource = sanitizeDotSource(currentDotSource);
             
+            // Remove any existing event listeners before rendering
+            clearEventListeners();
+            
             // Render the graph with error handling
             graphviz
                 .onerror(handleGraphvizError)
@@ -267,14 +270,32 @@ const Graph = (function() {
                             const isHighlighted = d3.select(this).classed("highlighted");
                             d3.select(this).select("path")
                                 .style("stroke-width", isHighlighted ? "2px" : "1px");
+                            // Always keep edge labels fully visible, regardless of highlight state
                             d3.select(this).select("text")
-                                .style("fill-opacity", isHighlighted ? "1" : "0.5");
+                                .style("fill-opacity", "1");
                         });
                 });
         } catch (error) {
             console.error("Error rendering graph:", error);
             showRenderingError();
         }
+    }
+    
+    /**
+     * Clear existing event listeners to prevent memory leaks during rerendering.
+     */
+    function clearEventListeners() {
+        // Remove event listeners from nodes
+        d3.selectAll(".node")
+            .on("mouseover", null)
+            .on("mouseout", null)
+            .on("mousemove", null)
+            .on("click", null);
+        
+        // Remove event listeners from edges
+        d3.selectAll(".edge")
+            .on("mouseover", null)
+            .on("mouseout", null);
     }
     
     /**
@@ -488,24 +509,6 @@ const Graph = (function() {
     }
     
     /**
-     * Make the graph deterministic by ensuring consistent layout.
-     * 
-     * @param {string} dotSource - The DOT source
-     * @returns {string} Modified DOT source with deterministic settings
-     */
-    function makeGraphDeterministic(dotSource) {
-        // If the DOT source already contains layout settings, don't modify it
-        if (dotSource.includes("layout=") || dotSource.includes("ordering=")) {
-            return dotSource;
-        }
-        
-        // Add deterministic settings to the graph
-        // Insert after the first opening brace of the digraph
-        return dotSource.replace(/(\b(?:di)?graph\s+[A-Za-z0-9_]*\s*\{)/,
-            '$1\n  // Deterministic layout settings\n  layout="dot";\n  ordering=out;\n  rankdir="LR";\n');
-    }
-    
-    /**
      * Update the graph with new DOT source.
      * 
      * @param {string} newDotSource - New DOT source
@@ -513,11 +516,11 @@ const Graph = (function() {
      */
     function updateGraph(newDotSource, onNodeClick) {
         try {
-            // Make the graph deterministic
-            newDotSource = makeGraphDeterministic(newDotSource);
-            
             // Update the DOT source
             currentDotSource = newDotSource;
+            
+            // Clear existing event listeners
+            clearEventListeners();
             
             // Update URL with the new graph
             Utils.updateUrlWithGraph(newDotSource);
