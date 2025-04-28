@@ -80,8 +80,24 @@ const App = (function() {
         // Clear existing options
         serviceSelect.innerHTML = '<option value="">Select a node...</option>';
         
-        // Add new options
-        nodes.forEach(node => {
+        // Sort nodes by ID for a better user experience
+        const sortedNodes = [...nodes].sort((a, b) => {
+            return a.id.localeCompare(b.id, undefined, { sensitivity: 'base' });
+        });
+        
+        // Add new options, filtering out invisible nodes
+        sortedNodes.forEach(node => {
+            // Skip invisible/hidden nodes
+            if (node.attrs && 
+                (node.attrs.includes('style="invis"') || 
+                 node.attrs.includes('style=invis') || 
+                 node.attrs.includes('style="invisible"') || 
+                 node.attrs.includes('style=invisible') ||
+                 node.attrs.includes('style="hidden"') ||
+                 node.attrs.includes('style=hidden'))) {
+                return;
+            }
+            
             const option = document.createElement("option");
             option.value = node.id;
             option.textContent = node.id;
@@ -142,7 +158,30 @@ const App = (function() {
         const unlimitedHops = unlimitedHopsCheckbox.checked;
         const maxHops = unlimitedHops ? Number.MAX_SAFE_INTEGER : parseInt(hopLimitSlider.value);
         
-        Graph.updateView(selectedNodeId, viewMode, maxHops);
+        // First clear previous selections using direct DOM manipulation
+        d3.selectAll(".node")
+            .classed("highlighted", false)
+            .classed("faded", false)
+            .classed("selected", false);
+            
+        d3.selectAll(".edge")
+            .classed("highlighted", false)
+            .classed("faded", false)
+            .classed("selected-arrow", false);
+            
+        d3.selectAll(".cluster")
+            .classed("highlighted-cluster", false)
+            .classed("faded-cluster", false);
+            
+        // Reset the Graph's internal selection array
+        if (window.Graph && window.Graph.currentSelection) {
+            window.Graph.currentSelection = [];
+        }
+        
+        // Now apply new highlighting if needed
+        if (selectedNodeId) {
+            Graph.updateView(selectedNodeId, viewMode, maxHops);
+        }
     }
     
     /**

@@ -948,6 +948,7 @@ const Graph = (function() {
         updateView,
         getNodes,
         getEdges,
-        getDotSource
+        getDotSource,
+        currentSelection
     };
 })(); 
