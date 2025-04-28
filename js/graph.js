@@ -378,7 +378,8 @@ const Graph = (function() {
         d3.selectAll(".node")
             .classed("highlighted", false)
             .classed("faded", false)
-            .classed("selected", false);
+            .classed("selected", false)
+            .classed("selected-node", false);
             
         d3.selectAll(".edge")
             .classed("highlighted", false)
@@ -658,13 +659,14 @@ const Graph = (function() {
                 const isHighlighted = nodesToHighlight.has(nodeId);
                 const isSelected = nodeId === selectedNodeId;
                 
-                // If the node is already highlighted from another selection, keep it highlighted
                 const wasHighlighted = d3.select(this).classed("highlighted");
+                const wasSelected = d3.select(this).classed("selected-node");
                 
                 d3.select(this)
-                    .classed("highlighted", isHighlighted || wasHighlighted)
-                    .classed("faded", !isHighlighted && !wasHighlighted)
-                    .classed("selected", isSelected || d3.select(this).classed("selected"));
+                    .classed("highlighted", (isHighlighted && !isSelected) || (wasHighlighted && !isSelected))
+                    .classed("faded", !isHighlighted && !wasHighlighted && !isSelected && !wasSelected)
+                    .classed("selected", false)
+                    .classed("selected-node", isSelected || wasSelected);
             }
         });
         

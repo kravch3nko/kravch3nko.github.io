@@ -162,7 +162,8 @@ const App = (function() {
         d3.selectAll(".node")
             .classed("highlighted", false)
             .classed("faded", false)
-            .classed("selected", false);
+            .classed("selected", false)
+            .classed("selected-node", false);
             
         d3.selectAll(".edge")
             .classed("highlighted", false)
