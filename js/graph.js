@@ -163,10 +163,6 @@ const Graph = (function() {
             return;
         }
         
-        // Make sure controls start expanded
-        controls.classList.add("expanded");
-        toggleButton.textContent = "×";
-        
         // Force any existing inline styles to be removed that might interfere
         controls.style.display = "";
         
