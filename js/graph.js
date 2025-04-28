@@ -822,8 +822,24 @@ const Graph = (function() {
         const visited = new Map();
         visited.set(startNodeId, 0);
         
-        // Queue for BFS
+        // Queue for BFS - track both node ID and hop distance
         const queue = [{ id: startNodeId, distance: 0 }];
+        
+        // Create a set of hidden nodes
+        const hiddenNodes = new Set();
+        
+        // Check for hidden nodes in the node list
+        nodes.forEach(node => {
+            if (node.attrs && 
+                (node.attrs.includes('style="invis"') || 
+                 node.attrs.includes('style="invisible"') || 
+                 node.attrs.includes('style=invis') || 
+                 node.attrs.includes('style=invisible') ||
+                 node.attrs.includes('style="hidden"') ||
+                 node.attrs.includes('style=hidden'))) {
+                hiddenNodes.add(node.id);
+            }
+        });
         
         while (queue.length > 0) {
             const { id: currentId, distance } = queue.shift();
@@ -852,14 +868,18 @@ const Graph = (function() {
                     directEdges.add(edgeId);
                 }
                 
+                // Calculate new distance, but don't count the hop if this is a hidden node
+                const isHiddenNode = hiddenNodes.has(neighborId);
+                const newDistance = isHiddenNode ? distance : distance + 1;
+                
                 // If we haven't visited this neighbor or found a shorter path
-                if (!visited.has(neighborId) || visited.get(neighborId) > distance + 1) {
+                if (!visited.has(neighborId) || visited.get(neighborId) > newDistance) {
                     // Add to highlight set and visited
                     nodesToHighlight.add(neighborId);
-                    visited.set(neighborId, distance + 1);
+                    visited.set(neighborId, newDistance);
                     
-                    // Add to queue
-                    queue.push({ id: neighborId, distance: distance + 1 });
+                    // Add to queue with appropriate distance
+                    queue.push({ id: neighborId, distance: newDistance });
                 }
             }
         }
