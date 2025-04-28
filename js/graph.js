@@ -311,18 +311,18 @@ const Graph = (function() {
         const viewMode = viewModeInput ? viewModeInput.value : 'downstream'; // Default to downstream if not found
         
         // Get max hops, checking for unlimited hops first
-        let maxHops = 5; // Default fallback
+        let maxHops = 1; // Default fallback
         const unlimitedHopsCheckbox = document.getElementById("unlimited-hops");
         const hopLimitSlider = document.getElementById("hop-limit");
         
         if (unlimitedHopsCheckbox && unlimitedHopsCheckbox.checked) {
             // Use a very high value for unlimited hops
-            maxHops = 100;
+            maxHops = 999999;
         } else if (hopLimitSlider) {
             // Use the slider value
             maxHops = parseInt(hopLimitSlider.value);
             if (isNaN(maxHops) || maxHops <= 0) {
-                maxHops = 5; // Fallback if value is invalid
+                maxHops = 1; // Fallback if value is invalid
             }
         }
         

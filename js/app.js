@@ -63,9 +63,8 @@ const App = (function() {
         }
         
         // Set unlimited hops by default
-        unlimitedHopsCheckbox.checked = true;
-        hopLimitSlider.disabled = true;
-        hopValueDisplay.textContent = "∞";
+        unlimitedHopsCheckbox.checked = false;
+        hopLimitSlider.disabled = false;
         
         // Populate node select dropdown
         populateNodeSelect();
@@ -89,6 +88,18 @@ const App = (function() {
             serviceSelect.appendChild(option);
         });
     }
+
+    function toggleUnlimitedHops() {
+        if (unlimitedHopsCheckbox.checked) {
+            hopLimitSlider.disabled = true;
+            hopValueDisplay.textContent = "∞";
+        } else {
+            hopLimitSlider.disabled = false;
+            hopValueDisplay.textContent = hopLimitSlider.value;
+        }
+        updateView();
+    }
+    
     
     /**
      * Set up event listeners for UI controls.
@@ -109,16 +120,7 @@ const App = (function() {
         });
         
         // Unlimited hops checkbox
-        unlimitedHopsCheckbox.addEventListener("change", function() {
-            if (this.checked) {
-                hopLimitSlider.disabled = true;
-                hopValueDisplay.textContent = "∞";
-            } else {
-                hopLimitSlider.disabled = false;
-                hopValueDisplay.textContent = hopLimitSlider.value;
-            }
-            updateView();
-        });
+        unlimitedHopsCheckbox.addEventListener("change", toggleUnlimitedHops);
     }
     
     /**
