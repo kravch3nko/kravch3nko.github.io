@@ -454,10 +454,6 @@ const Editor = (function() {
                     toggleEditor();
                 });
                 
-                // Set up close editor button
-                document.getElementById('close-editor').addEventListener('click', function() {
-                    closeEditor();
-                });
             } catch (error) {
                 console.error("Error initializing editor:", error);
                 alert("There was an error initializing the editor. Some features may not work properly.");
@@ -812,9 +808,6 @@ const Editor = (function() {
         
         editorContainer.classList.toggle('active');
         graphContainer.classList.toggle('editor-active');
-        
-        // Update button text
-        toggleButton.textContent = editorContainer.classList.contains('active') ? 'Hide Editor' : 'Show Editor';
     }
     
     /**
@@ -827,7 +820,6 @@ const Editor = (function() {
         
         editorContainer.classList.remove('active');
         graphContainer.classList.remove('editor-active');
-        toggleButton.textContent = 'Show Editor';
     }
     
     /**

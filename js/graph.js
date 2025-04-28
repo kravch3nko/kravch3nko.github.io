@@ -201,7 +201,6 @@ const Graph = (function() {
                 controls.style.display = ""; // Use CSS default
             } else {
                 toggleButton.textContent = "⚙";
-                controls.style.display = "none"; // Force hidden if class doesn't work
             }
             
             console.log("Controls toggled. Expanded:", controls.classList.contains("expanded"));
