@@ -243,6 +243,32 @@ body {
     fill: #000000;
 }
 
+/* Edge path styling */
+.edge path.highlighted-path {
+    stroke-opacity: 1;
+}
+
+.edge path.direct-connection {
+    stroke-width: 2.5px;
+}
+
+.edge path.highlighted-path:not(.direct-connection) {
+    stroke-width: 1.5px;
+}
+
+.edge path.faded-path {
+    stroke-opacity: 0.3;
+    stroke-width: 1px;
+}
+
+.edge text.highlighted-text {
+    fill-opacity: 1;
+}
+
+.edge text.faded-text {
+    fill-opacity: 0.3;
+}
+
 /* DOT validation status */
 #validation-status {
     padding: 5px 10px;

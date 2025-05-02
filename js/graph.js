@@ -386,6 +386,15 @@ const Graph = (function() {
             .classed("faded", false)
             .classed("selected-arrow", false);
             
+        d3.selectAll(".edge path")
+            .classed("highlighted-path", false)
+            .classed("direct-connection", false)
+            .classed("faded-path", false);
+            
+        d3.selectAll(".edge text")
+            .classed("highlighted-text", false)
+            .classed("faded-text", false);
+            
         d3.selectAll(".cluster")
             .classed("highlighted-cluster", false)
             .classed("faded-cluster", false);
@@ -698,11 +707,11 @@ const Graph = (function() {
                     
                 // Apply additional styles to ensure visibility
                 d3.select(edgeElement).select("path")
-                    .style("stroke-width", isDirectConnection ? "2.5px" : "1.5px")
-                    .style("stroke-opacity", "1");
+                    .classed("highlighted-path", true)
+                    .classed("direct-connection", isDirectConnection);
                     
                 d3.select(edgeElement).selectAll("text")
-                    .style("fill-opacity", "1");
+                    .classed("highlighted-text", true);
             }
         });
         
@@ -714,12 +723,11 @@ const Graph = (function() {
                 
                 // Make path semi-transparent
                 edge.select("path")
-                    .style("stroke-opacity", "0.3")
-                    .style("stroke-width", "1px");
+                    .classed("faded-path", true);
                     
                 // Make text semi-transparent
                 edge.selectAll("text")
-                    .style("fill-opacity", "0.3");
+                    .classed("faded-text", true);
             }
         });
         
